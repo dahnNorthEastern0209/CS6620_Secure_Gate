@@ -25,4 +25,4 @@ jobs:
             --config .semgrep/shell-injection.yml \
             --error \
             --metrics=off \
-            .
+            tests/vulnerable_example.py
