@@ -1,0 +1,38 @@
+name: Test Scanner Result Validation
+
+on:
+  push:
+    branches:
+      - feature/david-security-gate
+
+permissions:
+  contents: read
+
+jobs:
+  test-scan-result:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Verify scanner response handling
+        shell: bash
+        run: |
+          check_result() {
+            local label="$1"
+            local response="$2"
+            local expected="$3"
+            local actual=0
+
+            echo "Testing: $label"
+            python3 scripts/check_scan_result.py <<< "$response" || actual=$?
+            echo "Expected exit code: $expected, actual: $actual"
+
+            if [[ "$actual" -ne "$expected" ]]; then
+              return 1
+            fi
+          }
+
+          check_result "No HIGH findings" '{"success":true,"summary":{"high":0}}' 0
+          check_result "One HIGH finding" '{"success":true,"summary":{"high":1}}' 1
+          check_result "Unsuccessful scan" '{"success":false}' 1
