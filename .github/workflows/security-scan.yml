@@ -4,12 +4,16 @@ name: SecureGate SAST Security Check
 on:
   pull_request:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/david-security-gate
 
 permissions:
   contents: read
 
 jobs:
   security-scan:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -26,3 +30,47 @@ jobs:
             --error \
             --metrics=off \
             tests/vulnerable_example.py
+  
+  live-scanner-test:
+    if: github.event_name == 'push' && vars.SCANNER_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Test the HTTPS scanner and Python validator
+        shell: bash
+        env:
+          SCANNER_URL: ${{ vars.SCANNER_URL }}
+          SCANNER_API_KEY: ${{ secrets.SCANNER_API_KEY }}
+        run: |
+          if [[ -z "$SCANNER_API_KEY" ]]; then
+            echo "Missing GitHub Actions secret SCANNER_API_KEY."
+            exit 1
+          fi
+
+          scan() {
+            curl --proto '=https' --fail --silent --show-error \
+              --max-time 60 \
+              -H 'Content-Type: application/json' \
+              -H "x-api-key: $SCANNER_API_KEY" \
+              --data "$1" \
+              "${SCANNER_URL%/}/scan/code"
+          }
+
+          echo "Testing clean JavaScript sample"
+          clean_response=$(scan '{"filename":"clean.js","code":"const answer = 42;"}')
+          printf '%s\n' "$clean_response" | python3 scripts/check_scan_result.py
+
+          echo "Testing sample with a fake hardcoded password"
+          high_response=$(scan '{"filename":"test.js","code":"const password = \"demo-only\";"}')
+          status=0
+          output=$(printf '%s\n' "$high_response" | python3 scripts/check_scan_result.py 2>&1) || status=$?
+          printf '%s\n' "$output"
+
+          if [[ "$status" -ne 1 || "$output" != "Security check failed: 1 HIGH finding(s)." ]]; then
+            echo "Expected the validator to reject exactly one HIGH finding."
+            exit 1
+          fi
