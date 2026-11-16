@@ -1,6 +1,7 @@
 name: Test Scanner Result Validation
 
 on:
+  pull_request:
   push:
     branches:
       - feature/david-security-gate
@@ -45,6 +46,7 @@ jobs:
       - name: Check out the validator
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Check out Yuzhe's scanner
@@ -72,6 +74,7 @@ jobs:
           printf '\n'
 
       - name: Verify real scanner responses
+        if: github.event_name == 'push'
         shell: bash
         run: |
           scan() {
@@ -96,6 +99,16 @@ jobs:
             echo "Expected the validator to reject exactly one HIGH finding."
             exit 1
           fi
+      
+      - name: Scan changed JavaScript files
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+         BASE_SHA: ${{ github.event.pull_request.base.sha }}
+         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+         SCANNER_URL: http://127.0.0.1:3001
+         SCANNER_API_KEY: securegate-ci-demo
+        run: python3 scripts/scan_changed_js.py "$BASE_SHA" "$HEAD_SHA"
 
       - name: Show scanner logs if the test fails
         if: failure()
