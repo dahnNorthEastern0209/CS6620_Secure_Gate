@@ -30,3 +30,16 @@ output "scanner_url" {
 output "target_group_arn" {
   value = module.loadbalancer.target_group_arn
 }
+
+output "scanner_instance_id" {
+  value = module.compute.instance_id
+}
+
+output "scanner_public_ip" {
+  description = "Direct access should time out: the scanner only accepts ALB traffic"
+  value       = module.compute.public_ip
+}
+
+output "ecr_repository_url" {
+  value = module.compute.ecr_repository_url
+}
