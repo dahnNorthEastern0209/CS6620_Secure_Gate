@@ -1,4 +1,3 @@
-
 name: SecureGate SAST Security Check
 
 on:
@@ -53,6 +52,7 @@ jobs:
 
           scan() {
             curl --proto '=https' --fail --silent --show-error \
+              --cacert certs/alb-cert.pem \
               --max-time 60 \
               -H 'Content-Type: application/json' \
               -H "x-api-key: $SCANNER_API_KEY" \
