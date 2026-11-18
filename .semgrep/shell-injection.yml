@@ -1,0 +1,7 @@
+rules:
+  - id: unsafe-shell-execution
+    languages: [python]
+    severity: ERROR
+    message: "Potential shell injection through subprocess"
+    patterns:
+      - pattern: subprocess.run(..., shell=True, ...)
