@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - feature/david-security-gate
+      - demo/david-aws-lab
 
 permissions:
   contents: read
@@ -44,7 +45,7 @@ jobs:
           echo "Semgrep detected the expected finding."
   
   live-scanner-test:
-    if: github.event_name == 'push' && vars.SCANNER_URL != ''
+    if: github.event_name == 'push' && vars.DAVID_LAB_SCANNER_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -55,8 +56,8 @@ jobs:
       - name: Test the HTTPS scanner and Python validator
         shell: bash
         env:
-          SCANNER_URL: ${{ vars.SCANNER_URL }}
-          SCANNER_API_KEY: ${{ secrets.SCANNER_API_KEY }}
+          SCANNER_URL: ${{ vars.DAVID_LAB_SCANNER_URL }}
+          SCANNER_API_KEY: ${{ secrets.DAVID_LAB_SCANNER_API_KEY }}
         run: |
           if [[ -z "$SCANNER_API_KEY" ]]; then
             echo "Missing GitHub Actions secret SCANNER_API_KEY."
