@@ -22,13 +22,26 @@ jobs:
       - name: Install Semgrep
         run: python3 -m pip install semgrep
 
-      - name: Run SAST security scan
+      - name: Verify the Semgrep rule detects the test fixture
+        shell: bash
         run: |
-          semgrep scan \
+          status=0
+          output=$(semgrep scan \
             --config .semgrep/shell-injection.yml \
             --error \
             --metrics=off \
-            tests/vulnerable_example.py
+            tests/vulnerable_example.py 2>&1) || status=$?
+
+          printf '%s\n' "$output"
+
+          if [[ "$status" -ne 1 ]] ||
+             ! grep -Fq 'semgrep.unsafe-shell-execution' <<< "$output" ||
+             ! grep -Fq 'Findings: 1 (1 blocking)' <<< "$output"; then
+            echo "Expected one blocking unsafe-shell-execution finding in the test fixture."
+            exit 1
+          fi
+
+          echo "Semgrep detected the expected finding."
   
   live-scanner-test:
     if: github.event_name == 'push' && vars.SCANNER_URL != ''
