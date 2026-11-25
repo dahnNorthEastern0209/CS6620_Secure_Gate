@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+backend.hcl
+**/.build/
+
+# Sample S3
+101-1-aaa.json
+102-1-bbb.json
+103-1-ccc.json
