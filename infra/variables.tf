@@ -27,3 +27,14 @@ variable "instance_profile_name" {
   type        = string
   default     = "LabInstanceProfile"
 }
+
+variable "alert_email" {
+  description = "Email address subscribed to SNS alerts (set via TF_VAR_alert_email)"
+  type        = string
+}
+
+variable "lab_role_name" {
+  description = "Existing IAM role for Lambda (Learner Lab: LabRole)"
+  type        = string
+  default     = "LabRole"
+}

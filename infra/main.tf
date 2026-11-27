@@ -39,3 +39,18 @@ resource "aws_ssm_parameter" "alb_cert" {
 # Modules added by the team as they are built:
 # module "storage"    { source = "./modules/storage" ... }    # David: S3 reports bucket, parameters
 # module "monitoring" { source = "./modules/monitoring" ... } # Nishnath: Lambda, EventBridge, CloudWatch, SNS
+
+# Monitoring (Nishnath): Lambda health check, EventBridge, CloudWatch, SNS
+data "aws_caller_identity" "current" {}
+
+module "monitoring" {
+  source       = "./modules/monitoring"
+  project      = var.project
+  lab_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.lab_role_name}"
+  alert_email  = var.alert_email
+
+  # Using the parameters' names makes Terraform create them before the Lambda
+  scanner_url_param  = aws_ssm_parameter.scanner_url.name
+  scanner_cert_param = aws_ssm_parameter.alb_cert.name
+  depends_on_scanner = module.loadbalancer.scanner_url
+}

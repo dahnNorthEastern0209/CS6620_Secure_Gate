@@ -39,6 +39,11 @@ resource "aws_instance" "scanner" {
   })
   user_data_replace_on_change = true
 
+  # Don't replace the instance just because a newer Amazon Linux image is released
+  lifecycle {
+    ignore_changes = [ami]
+  }
+
   tags = { Name = "${var.project}-scanner" }
 }
 
