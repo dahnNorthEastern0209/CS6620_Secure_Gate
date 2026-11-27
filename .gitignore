@@ -6,3 +6,15 @@ infra/.terraform/
 *.tfvars
 infra/backend.hcl
 *.pem
+.env
+.terraform/
+backend.hcl
+**/.build/
+
+# Sample S3
+101-1-aaa.json
+102-1-bbb.json
+103-1-ccc.json
+
+# Certificate(s)
+certs/

@@ -1,0 +1,115 @@
+name: Test Scanner Result Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feature/david-security-gate
+
+permissions:
+  contents: read
+
+jobs:
+  test-scan-result:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Verify scanner response handling
+        shell: bash
+        run: |
+          check_result() {
+            local label="$1"
+            local response="$2"
+            local expected="$3"
+            local actual=0
+
+            echo "Testing: $label"
+            python3 scripts/check_scan_result.py <<< "$response" || actual=$?
+            echo "Expected exit code: $expected, actual: $actual"
+
+            if [[ "$actual" -ne "$expected" ]]; then
+              return 1
+            fi
+          }
+
+          check_result "No HIGH findings" '{"success":true,"summary":{"high":0}}' 0
+          check_result "One HIGH finding" '{"success":true,"summary":{"high":1}}' 1
+          check_result "Unsuccessful scan" '{"success":false}' 1
+  
+  docker-scanner-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the validator
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out Yuzhe's scanner
+        uses: actions/checkout@v4
+        with:
+          ref: e7e564887f3299639da3ff7c1a10c7ad0969a272
+          path: scanner-source
+          persist-credentials: false
+
+      - name: Build and start the scanner
+        shell: bash
+        run: |
+          docker build -t securegate-scanner:ci scanner-source/scanner
+          docker run -d --name securegate-scanner-ci \
+            -p 127.0.0.1:3001:3000 \
+            -e SCANNER_API_KEY=securegate-ci-demo \
+            securegate-scanner:ci
+
+      - name: Wait for the scanner to respond
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --max-time 5 \
+            --retry 10 --retry-all-errors --retry-delay 2 \
+            http://127.0.0.1:3001/health
+          printf '\n'
+
+      - name: Verify real scanner responses
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          scan() {
+            curl --fail --silent --show-error --max-time 10 \
+              -H 'Content-Type: application/json' \
+              -H 'x-api-key: securegate-ci-demo' \
+              --data "$1" \
+              http://127.0.0.1:3001/scan/code
+          }
+
+          echo "Testing clean JavaScript"
+          clean_response=$(scan '{"filename":"clean.js","code":"const answer = 42;"}')
+          python3 scripts/check_scan_result.py <<< "$clean_response"
+
+          echo "Testing JavaScript with a fake hardcoded password"
+          high_response=$(scan '{"filename":"test.js","code":"const password = \"demo-only\";"}')
+          status=0
+          output=$(python3 scripts/check_scan_result.py <<< "$high_response" 2>&1) || status=$?
+          printf '%s\n' "$output"
+
+          if [[ "$status" -ne 1 || "$output" != "Security check failed: 1 HIGH finding(s)." ]]; then
+            echo "Expected the validator to reject exactly one HIGH finding."
+            exit 1
+          fi
+      
+      - name: Scan changed JavaScript files
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+         BASE_SHA: ${{ github.event.pull_request.base.sha }}
+         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+         SCANNER_URL: http://127.0.0.1:3001
+         SCANNER_API_KEY: securegate-ci-demo
+        run: python3 scripts/scan_changed_js.py "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Show scanner logs if the test fails
+        if: failure()
+        run: docker logs securegate-scanner-ci || true
