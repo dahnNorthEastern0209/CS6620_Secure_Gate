@@ -1,1 +1,1 @@
-const answer = 42;
+const password = "demo-only";
