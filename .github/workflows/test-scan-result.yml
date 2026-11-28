@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-scan-result:
     runs-on: ubuntu-latest
@@ -113,3 +117,48 @@ jobs:
       - name: Show scanner logs if the test fails
         if: failure()
         run: docker logs securegate-scanner-ci || true
+
+
+  aws-scanner-pr-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Require trusted repository PR
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [[ "$HEAD_REPO" != "$BASE_REPO" ]]; then
+            echo "External PR requires a trusted scanning process."
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify scanner configuration
+        shell: bash
+        env:
+          SCANNER_URL: ${{ vars.SCANNER_URL }}
+          SCANNER_API_KEY: ${{ secrets.SCANNER_API_KEY }}
+        run: |
+          if [[ "$SCANNER_URL" != https://* || "$SCANNER_URL" == https:// || -z "$SCANNER_API_KEY" ]]; then
+            echo "Scanner configuration is missing or invalid."
+            exit 1
+          fi
+
+      - name: Scan changed JavaScript using AWS
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SCANNER_URL: ${{ vars.SCANNER_URL }}
+          SCANNER_API_KEY: ${{ secrets.SCANNER_API_KEY }}
+          SCANNER_CA_CERT: certs/yuzhe-lab-alb-cert.pem
+        run: |
+          echo "Scanning pull request changes using AWS HTTPS scanner."
+          python3 scripts/scan_changed_js.py "$BASE_SHA" "$HEAD_SHA"

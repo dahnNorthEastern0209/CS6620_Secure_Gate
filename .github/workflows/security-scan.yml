@@ -65,7 +65,7 @@ jobs:
 
           scan() {
             curl --proto '=https' --fail --silent --show-error \
-              --cacert certs/alb-cert.pem \
+              --cacert certs/yuzhe-lab-alb-cert.pem \
               --max-time 60 \
               -H 'Content-Type: application/json' \
               -H "x-api-key: $SCANNER_API_KEY" \
