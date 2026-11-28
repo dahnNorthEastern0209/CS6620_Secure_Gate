@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 VALIDATOR = Path(__file__).with_name("check_scan_result.py")
@@ -36,13 +37,59 @@ def main():
         ).decode("utf-8")
         payload = json.dumps({"filename": filename, "code": code}).encode()
 
-        response = subprocess.run([
-            "curl", "--fail", "--silent", "--show-error", "--max-time", "10",
+        curl_command = [
+            "curl",
+            "--fail",
+            "--silent",
+            "--show-error",
+            "--connect-timeout", "5",
+            "--max-time", "15",
+        ]
+
+        if url.startswith("https://"):
+            certificate = os.environ.get(
+                "SCANNER_CA_CERT",
+                "certs/alb-cert.pem"
+            )
+
+            if not Path(certificate).is_file():
+                sys.exit(
+                    "Scan incomplete: scanner certificate is missing."
+                )
+
+            curl_command.extend([
+                "--proto", "=https",
+                "--cacert", certificate,
+            ])
+
+        curl_command.extend([
             "-H", "Content-Type: application/json",
             "-H", f"x-api-key: {key}",
             "--data-binary", "@-",
             f"{url}/scan/code",
-        ], input=payload, stdout=subprocess.PIPE)
+        ])
+
+        for attempt in range(4):
+            response = subprocess.run(
+                curl_command,
+                input=payload,
+                stdout=subprocess.PIPE,
+                timeout=20,
+            )
+
+            if response.returncode == 0:
+                break
+
+            if response.returncode not in (6, 7, 28, 52, 55, 56):
+                break
+
+            if attempt < 3:
+                print(
+                    f"Scanner request failed. Retry {attempt + 1}/3.",
+                    flush=True,
+                )
+                time.sleep(2)
+
 
         if response.returncode:
             sys.exit(f"Scan incomplete: scanner request failed for {filename!r}.")
@@ -59,5 +106,9 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (subprocess.CalledProcessError, UnicodeError) as error:
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        UnicodeError,
+    ) as error:
         sys.exit(f"Scan incomplete: {error}")
